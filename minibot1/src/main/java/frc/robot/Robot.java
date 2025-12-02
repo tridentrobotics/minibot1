@@ -1,104 +1,107 @@
-// Copyright (c) FIRST and other WPILib contributors.
-// Open Source Software; you can modify and/or share it under the terms of
-// the WPILib BSD license file in the root directory of this project.
-
 package frc.robot;
 
 import edu.wpi.first.wpilibj.TimedRobot;
-import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
-import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj.drive.DifferentialDrive;
+import com.ctre.phoenix6.hardware.TalonFX;
+import com.ctre.phoenix6.hardware.Pigeon2;
+import com.ctre.phoenix6.signals.NeutralModeValue;
+import com.ctre.phoenix6.signals.InvertedValue;
+import com.ctre.phoenix6.configs.TalonFXConfiguration;
 
-/**
- * The methods in this class are called automatically corresponding to each mode, as described in
- * the TimedRobot documentation. If you change the name of this class or the package after creating
- * this project, you must also update the Main.java file in the project.
- */
 public class Robot extends TimedRobot {
-  private static final String kDefaultAuto = "Default";
-  private static final String kCustomAuto = "My Auto";
-  private String m_autoSelected;
-  private final SendableChooser<String> m_chooser = new SendableChooser<>();
-
-  /**
-   * This function is run when the robot is first started up and should be used for any
-   * initialization code.
-   */
-  public Robot() {
-    m_chooser.setDefaultOption("Default Auto", kDefaultAuto);
-    m_chooser.addOption("My Auto", kCustomAuto);
-    SmartDashboard.putData("Auto choices", m_chooser);
+  // Motors - Update these CAN IDs to match your setup
+  private TalonFX leftMotor;   // Kraken connected to left wheel
+  private TalonFX rightMotor;  // Kraken connected to right wheel
+  
+  // Gyro
+  private Pigeon2 gyro;
+  
+  // Controller
+  private XboxController controller;
+  
+  // Drive system
+  private DifferentialDrive drive;
+  
+  // Constants
+  private static final int LEFT_MOTOR_ID = 1;    // Change to your left motor CAN ID
+  private static final int RIGHT_MOTOR_ID = 2;   // Change to your right motor CAN ID
+  private static final int GYRO_ID = 3;          // Change to your gyro CAN ID
+  
+  // Speed limiters (0.0 to 1.0)
+  private static final double MAX_SPEED = 0.7;     // 70% max speed for safety
+  private static final double TURN_SPEED = 0.6;    // 60% turn speed
+  
+  @Override
+  public void robotInit() {
+    // Initialize motors
+    leftMotor = new TalonFX(LEFT_MOTOR_ID);
+    rightMotor = new TalonFX(RIGHT_MOTOR_ID);
+    
+    // Initialize gyro
+    gyro = new Pigeon2(GYRO_ID);
+    
+    // Initialize controller
+    controller = new XboxController(0);
+    
+    // Configure motors
+    leftMotor.setNeutralMode(NeutralModeValue.Brake);
+    rightMotor.setNeutralMode(NeutralModeValue.Brake);
+    
+    // Invert right motor so both spin same direction for forward
+    TalonFXConfiguration rightConfig = new TalonFXConfiguration();
+    rightConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
+    rightMotor.getConfigurator().apply(rightConfig);
+    
+    // Create differential drive
+    drive = new DifferentialDrive(leftMotor::set, rightMotor::set);
+    drive.setMaxOutput(MAX_SPEED);
+    
+    System.out.println("Minibot initialized!");
   }
-
-  /**
-   * This function is called every 20 ms, no matter the mode. Use this for items like diagnostics
-   * that you want ran during disabled, autonomous, teleoperated and test.
-   *
-   * <p>This runs after the mode specific periodic functions, but before LiveWindow and
-   * SmartDashboard integrated updating.
-   */
+  
   @Override
-  public void robotPeriodic() {}
-
-  /**
-   * This autonomous (along with the chooser code above) shows how to select between different
-   * autonomous modes using the dashboard. The sendable chooser code works with the Java
-   * SmartDashboard. If you prefer the LabVIEW Dashboard, remove all of the chooser code and
-   * uncomment the getString line to get the auto name from the text box below the Gyro
-   *
-   * <p>You can add additional auto modes by adding additional comparisons to the switch structure
-   * below with additional strings. If using the SendableChooser make sure to add them to the
-   * chooser code above as well.
-   */
-  @Override
-  public void autonomousInit() {
-    m_autoSelected = m_chooser.getSelected();
-    // m_autoSelected = SmartDashboard.getString("Auto Selector", kDefaultAuto);
-    System.out.println("Auto selected: " + m_autoSelected);
+  public void teleopInit() {
+    // Reset gyro when teleop starts
+    gyro.reset();
   }
-
-  /** This function is called periodically during autonomous. */
+  
   @Override
-  public void autonomousPeriodic() {
-    switch (m_autoSelected) {
-      case kCustomAuto:
-        // Put custom auto code here
-        break;
-      case kDefaultAuto:
-      default:
-        // Put default auto code here
-        break;
+  public void teleopPeriodic() {
+    // Arcade drive: Left stick Y for forward/back, Right stick X for turning
+    double speed = -controller.getLeftY() * MAX_SPEED;     // Forward/backward
+    double turn = controller.getRightX() * TURN_SPEED;     // Left/right turn
+    
+    // Apply deadband to avoid stick drift
+    speed = applyDeadband(speed, 0.1);
+    turn = applyDeadband(turn, 0.1);
+    
+    // Drive the robot
+    drive.arcadeDrive(speed, turn);
+    
+    // Optional: Reset gyro with A button
+    if (controller.getAButtonPressed()) {
+      gyro.reset();
+      System.out.println("Gyro reset!");
+    }
+    
+    // Optional: Print gyro angle with B button
+    if (controller.getBButtonPressed()) {
+      System.out.println("Gyro angle: " + gyro.getYaw().getValueAsDouble());
     }
   }
-
-  /** This function is called once when teleop is enabled. */
+  
   @Override
-  public void teleopInit() {}
-
-  /** This function is called periodically during operator control. */
-  @Override
-  public void teleopPeriodic() {}
-
-  /** This function is called once when the robot is disabled. */
-  @Override
-  public void disabledInit() {}
-
-  /** This function is called periodically when disabled. */
-  @Override
-  public void disabledPeriodic() {}
-
-  /** This function is called once when test mode is enabled. */
-  @Override
-  public void testInit() {}
-
-  /** This function is called periodically during test mode. */
-  @Override
-  public void testPeriodic() {}
-
-  /** This function is called once when the robot is first started up. */
-  @Override
-  public void simulationInit() {}
-
-  /** This function is called periodically whilst in simulation. */
-  @Override
-  public void simulationPeriodic() {}
+  public void disabledInit() {
+    // Stop motors when disabled
+    drive.stopMotor();
+  }
+  
+  // Helper method to eliminate stick drift
+  private double applyDeadband(double value, double deadband) {
+    if (Math.abs(value) < deadband) {
+      return 0.0;
+    }
+    return value;
+  }
 }
