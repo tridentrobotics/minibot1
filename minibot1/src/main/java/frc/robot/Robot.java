@@ -2,17 +2,21 @@ package frc.robot;
 
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.XboxController;
-import edu.wpi.first.wpilibj.drive.DifferentialDrive;
 import com.ctre.phoenix6.hardware.TalonFX;
+import com.ctre.phoenix6.hardware.CANcoder;
 import com.ctre.phoenix6.hardware.Pigeon2;
 import com.ctre.phoenix6.signals.NeutralModeValue;
-import com.ctre.phoenix6.signals.InvertedValue;
-import com.ctre.phoenix6.configs.TalonFXConfiguration;
 
 public class Robot extends TimedRobot {
-  // Motors - Update these CAN IDs to match your setup
-  private TalonFX leftMotor;   // Kraken connected to left wheel
-  private TalonFX rightMotor;  // Kraken connected to right wheel
+  // Left Swerve Module
+  private TalonFX leftDriveMotor;
+  private TalonFX leftTurnMotor;
+  private CANcoder leftEncoder;
+  
+  // Right Swerve Module
+  private TalonFX rightDriveMotor;
+  private TalonFX rightTurnMotor;
+  private CANcoder rightEncoder;
   
   // Gyro
   private Pigeon2 gyro;
@@ -20,23 +24,31 @@ public class Robot extends TimedRobot {
   // Controller
   private XboxController controller;
   
-  // Drive system
-  private DifferentialDrive drive;
+  // CAN IDs - Based on your Phoenix Tuner
+  private static final int LEFT_DRIVE_ID = 2;
+  private static final int LEFT_TURN_ID = 4;
+  private static final int LEFT_ENCODER_ID = 0;
   
-  // Constants
-  private static final int LEFT_MOTOR_ID = 2;    // Left Talon FX
-  private static final int RIGHT_MOTOR_ID = 5;   // Right Talon FX (use 4 if this doesn't work)
-  private static final int GYRO_ID = 0;          // Pigeon 2
+  private static final int RIGHT_DRIVE_ID = 3;
+  private static final int RIGHT_TURN_ID = 5;
+  private static final int RIGHT_ENCODER_ID = 1;
   
-  // Speed limiters (0.0 to 1.0)
-  private static final double MAX_SPEED = 0.7;     // 70% max speed for safety
-  private static final double TURN_SPEED = 0.6;    // 60% turn speed
+  private static final int GYRO_ID = 0;
+  
+  // Speed constants
+  private static final double MAX_SPEED = 0.5;  // 50% for safety
   
   @Override
   public void robotInit() {
-    // Initialize motors
-    leftMotor = new TalonFX(LEFT_MOTOR_ID);
-    rightMotor = new TalonFX(RIGHT_MOTOR_ID);
+    // Initialize left module
+    leftDriveMotor = new TalonFX(LEFT_DRIVE_ID);
+    leftTurnMotor = new TalonFX(LEFT_TURN_ID);
+    leftEncoder = new CANcoder(LEFT_ENCODER_ID);
+    
+    // Initialize right module
+    rightDriveMotor = new TalonFX(RIGHT_DRIVE_ID);
+    rightTurnMotor = new TalonFX(RIGHT_TURN_ID);
+    rightEncoder = new CANcoder(RIGHT_ENCODER_ID);
     
     // Initialize gyro
     gyro = new Pigeon2(GYRO_ID);
@@ -44,60 +56,70 @@ public class Robot extends TimedRobot {
     // Initialize controller
     controller = new XboxController(0);
     
-    // Configure motors
-    leftMotor.setNeutralMode(NeutralModeValue.Brake);
-    rightMotor.setNeutralMode(NeutralModeValue.Brake);
+    // Configure all motors to brake mode
+    leftDriveMotor.setNeutralMode(NeutralModeValue.Brake);
+    leftTurnMotor.setNeutralMode(NeutralModeValue.Brake);
+    rightDriveMotor.setNeutralMode(NeutralModeValue.Brake);
+    rightTurnMotor.setNeutralMode(NeutralModeValue.Brake);
     
-    // Invert right motor so both spin same direction for forward
-    TalonFXConfiguration rightConfig = new TalonFXConfiguration();
-    rightConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
-    rightMotor.getConfigurator().apply(rightConfig);
-    
-    // Create differential drive
-    drive = new DifferentialDrive(leftMotor::set, rightMotor::set);
-    drive.setMaxOutput(MAX_SPEED);
-    
-    System.out.println("Minibot initialized!");
+    System.out.println("Swerve Minibot Initialized!");
   }
   
   @Override
   public void teleopInit() {
-    // Reset gyro when teleop starts
     gyro.reset();
+    System.out.println("Teleop started - Gyro reset!");
   }
   
   @Override
   public void teleopPeriodic() {
-    // Arcade drive: Left stick Y for forward/back, Right stick X for turning
-    double speed = -controller.getLeftY() * MAX_SPEED;     // Forward/backward
-    double turn = controller.getRightX() * TURN_SPEED;     // Left/right turn
+    // Get controller inputs
+    double forward = -controller.getLeftY();  // Forward/backward
+    double strafe = controller.getLeftX();    // Left/right
+    double rotation = controller.getRightX(); // Rotation
     
-    // Apply deadband to avoid stick drift
-    speed = applyDeadband(speed, 0.1);
-    turn = applyDeadband(turn, 0.1);
+    // Apply deadband
+    forward = applyDeadband(forward, 0.1);
+    strafe = applyDeadband(strafe, 0.1);
+    rotation = applyDeadband(rotation, 0.1);
     
-    // Drive the robot
-    drive.arcadeDrive(speed, turn);
+    // For a 2-wheel swerve (simplified differential swerve)
+    // Calculate desired speeds for each module
+    double leftSpeed = (forward - rotation) * MAX_SPEED;
+    double rightSpeed = (forward + rotation) * MAX_SPEED;
     
-    // Optional: Reset gyro with A button
+    // Set drive motor speeds
+    leftDriveMotor.set(leftSpeed);
+    rightDriveMotor.set(rightSpeed);
+    
+    // For now, keep turn motors at 0 (straight forward)
+    // You'll need proper swerve kinematics for full functionality
+    leftTurnMotor.set(0);
+    rightTurnMotor.set(0);
+    
+    // Reset gyro with A button
     if (controller.getAButtonPressed()) {
       gyro.reset();
       System.out.println("Gyro reset!");
     }
     
-    // Optional: Print gyro angle with B button
+    // Print diagnostics with B button
     if (controller.getBButtonPressed()) {
-      System.out.println("Gyro angle: " + gyro.getYaw().getValueAsDouble());
+      System.out.println("Gyro: " + gyro.getYaw().getValueAsDouble());
+      System.out.println("Left Encoder: " + leftEncoder.getAbsolutePosition().getValueAsDouble());
+      System.out.println("Right Encoder: " + rightEncoder.getAbsolutePosition().getValueAsDouble());
     }
   }
   
   @Override
   public void disabledInit() {
-    // Stop motors when disabled
-    drive.stopMotor();
+    // Stop all motors
+    leftDriveMotor.set(0);
+    rightDriveMotor.set(0);
+    leftTurnMotor.set(0);
+    rightTurnMotor.set(0);
   }
   
-  // Helper method to eliminate stick drift
   private double applyDeadband(double value, double deadband) {
     if (Math.abs(value) < deadband) {
       return 0.0;
