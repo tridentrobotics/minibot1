@@ -24,9 +24,9 @@ public class Robot extends TimedRobot {
   private DifferentialDrive drive;
   
   // Constants
-  private static final int LEFT_MOTOR_ID = 1;    // Change to your left motor CAN ID
-  private static final int RIGHT_MOTOR_ID = 2;   // Change to your right motor CAN ID
-  private static final int GYRO_ID = 3;          // Change to your gyro CAN ID
+  private static final int LEFT_MOTOR_ID = 2;    // Left Talon FX
+  private static final int RIGHT_MOTOR_ID = 5;   // Right Talon FX (use 4 if this doesn't work)
+  private static final int GYRO_ID = 0;          // Pigeon 2
   
   // Speed limiters (0.0 to 1.0)
   private static final double MAX_SPEED = 0.7;     // 70% max speed for safety
